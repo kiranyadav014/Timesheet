@@ -1,0 +1,103 @@
+{
+  "theme": "LIGHT",
+  "archetype": "Archetype 4: Swiss & High-Contrast",
+  "emotional_tone": "Objective, rigid, functional, high clarity. The aesthetic emphasizes 'Color is Function Only' — 95% of the UI is monochrome, with color serving only to guide action or warn.",
+  "colors": {
+    "background": {
+      "base": "#F9F9F8",
+      "surface": "#FFFFFF",
+      "surface_hover": "#F2F2F0"
+    },
+    "text": {
+      "primary": "#1A1A1A",
+      "secondary": "#5C5C5C",
+      "disabled": "#A3A3A3"
+    },
+    "border": {
+      "default": "#E5E5E5",
+      "strong": "#D1D1D1"
+    },
+    "brand": {
+      "primary": "#0033CC",
+      "primary_hover": "#002299"
+    },
+    "status": {
+      "warning": "#FF4400",
+      "warning_bg": "#FFF0EA",
+      "success": "#008A2E",
+      "success_bg": "#E6F6EB"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Cabinet Grotesk, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "mono": "IBM Plex Mono, monospace"
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl tracking-tighter font-black text-[#1A1A1A]",
+      "h2": "text-2xl sm:text-3xl tracking-tight font-bold text-[#1A1A1A]",
+      "h3": "text-xl tracking-tight font-semibold text-[#1A1A1A]",
+      "h4": "text-lg tracking-tight font-medium text-[#1A1A1A]",
+      "body": "text-sm leading-relaxed text-[#1A1A1A]",
+      "overline": "text-xs tracking-[0.2em] uppercase font-bold text-[#5C5C5C]"
+    }
+  },
+  "spacing_and_layout": {
+    "strategy": "Control Room Protocol for Dashboards.",
+    "container": "Use wide padding around the main content wrapper (p-6 md:p-8 lg:p-12).",
+    "grid": "Base grid for dashboard: grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-6.",
+    "radii": "Sharp edges. Max border radius is 4px (rounded-sm) for a technical, precise feel. No soft rounded corners."
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#0033CC] text-white hover:bg-[#002299] rounded-sm transition-colors",
+      "secondary": "bg-white border border-[#D1D1D1] text-[#1A1A1A] hover:bg-[#F2F2F0] rounded-sm transition-colors",
+      "destructive": "bg-[#FF4400] text-white hover:bg-[#CC3600] rounded-sm"
+    },
+    "cards": {
+      "default": "bg-white border border-[#D1D1D1] rounded-sm shadow-sm",
+      "hover": "hover:shadow-md hover:-translate-y-[1px] transition-all duration-200"
+    },
+    "data_table": {
+      "layout": "Dense F-Pattern layout. Stick headers, horizontal scrolling for overflow.",
+      "styles": "Zebra striping with extremely subtle grey (#F9F9F8 vs #FFFFFF). Right-align numeric columns.",
+      "actions": "Inline actions on row hover. Sticky right column for actions if columns exceed viewport."
+    },
+    "forms": {
+      "inputs": "bg-white border border-[#D1D1D1] rounded-sm focus:ring-1 focus:ring-[#0033CC] focus:border-[#0033CC]",
+      "labels": "Use the overline typography style (uppercase, wide tracking) for all form labels."
+    },
+    "navigation": {
+      "header": "Sticky top header with glassmorphism: backdrop-blur-xl bg-white/70, border-b border-[#D1D1D1] z-50."
+    },
+    "banners": {
+      "friday_warning": "bg-[#FFF0EA] border-l-4 border-[#FF4400] p-4 text-[#FF4400] font-medium flex items-center gap-3"
+    }
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "weight": "regular or duotone depending on emphasis"
+  },
+  "motion": {
+    "hover_states": "Use specific transition properties: transition: background-color 0.2s ease, transform 0.2s ease",
+    "micro_interactions": "Subtle scale-down on active state (active:scale-95) for primary buttons."
+  },
+  "testing": {
+    "requirements": "All interactive elements MUST have data-testid attributes using kebab-case, role-based naming (e.g., admin-login-button, approve-timesheet-btn)."
+  },
+  "media": {
+    "login_background": {
+      "url": "https://images.unsplash.com/photo-1774229011996-c25c41fc0493?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwyfHxtaW5pbWFsaXN0JTIwbW9kZXJuJTIwb2ZmaWNlJTIwYXJjaGl0ZWN0dXJlJTIwYWJzdHJhY3R8ZW58MHx8fHwxNzc3MjA5OTUyfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Abstract, minimalist architectural pattern for the split-screen login background, providing a high-end corporate feel without distraction."
+    }
+  },
+  "instructions_to_main_agent": [
+    "Install Phosphor Icons: yarn add @phosphor-icons/react",
+    "Implement the UI using raw Tailwind classes and Shadcn components customized to have sharp edges (rounded-sm) and high-contrast borders.",
+    "Do not use generic 'Inter' or 'Roboto'. Set up Cabinet Grotesk for headings and IBM Plex Sans for body in the Tailwind configuration.",
+    "The login page should be a split layout: left side is the login form, right side uses the login_background media URL.",
+    "For the Admin Dashboard, use the 'Control Room' grid with dense spacing to display pending timesheets and employee data efficiently.",
+    "Enforce the Friday deadline lock system prominently using the 'friday_warning' banner style."
+  ]
+}
