@@ -1,0 +1,41 @@
+{
+  "summary": "E2E testing of Timesheet v2 (daily-row + leaves). Backend: 32/32 pytest tests passing — auth, employee CRUD, lock (423), Monday validation, future-week rejection, save-day, submit-week, approve/reject, resubmit-after-reject, leave apply/approve/cancel, approved-leave auto-merge into week, pending_leaves in summary, per-day CSV export, daily+Friday reminder endpoints (Resend mocked, sent=0). Frontend: admin employee creation, employee login, lock banner, week-select, 5 daily save-day + submit-week, missing= URL param banner, leave application (Leaves tab), admin leave approve (tab-leaves), review dialog all work. Minor visual issue: Review Timesheet dialog body appears empty/clipped visually although DOM contains correct daily breakdown table (Date,Type,Hours,Tasks with 5 rows).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminDashboard ReviewDialog", "issue": "Daily breakdown table is rendered in DOM but appears visually clipped/invisible — dialog body between title and Close button shows as empty gray area. Likely DialogContent max-height/overflow or text color issue.", "selector": "[role='dialog'] table", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin Review Dialog", "issues": ["DialogContent likely missing DialogDescription (Radix a11y warning)", "Content area appears empty visually despite data being present — check overflow/max-height/text color on dialog body"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_timesheet_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix visual rendering of Admin ReviewDialog daily breakdown — data is in DOM (table has Date/Type/Hours/Tasks headers + 5 rows) but not visible in viewport. Likely a missing/wrong CSS class on DialogContent scroll container or text color inheriting transparent/muted."
+  ],
+  "critical_code_review_comments": [
+    "server.py ~815 lines — consider splitting into routers/{auth,employees,timesheets,leaves,reports,reminders}.py for maintainability.",
+    "CORS config: explicit allow_origins=[FRONTEND_URL, 'http://localhost:3000'] with allow_credentials=True is correct — good fix from iteration_1.",
+    "bcrypt hashes verified ($2b$ via successful login).",
+    "seed_admin is idempotent and updates password if changed — good.",
+    "_get_or_create_week uses insert_one then returns local doc — safe, but if two save-day calls race on first save they could both create docs; add unique index on (employee_id, week_start) to enforce. Current index is non-unique (line 782).",
+    "delete_employee cascades to timesheets AND leaves — verified by test_delete_employee_cascade.",
+    "No brute-force login lockout implemented — not in spec but worth considering for production.",
+    "get_week_start uses UTC date which drives lock logic; if users are in different timezones, day-boundary issues possible. Acceptable for MVP.",
+    "save-day correctly flips rejected→draft on next save (line 415). Good.",
+    "Approved-leave auto-merge in submit_week overwrites existing daily_entries for those dates — correct behavior.",
+    "CSV export uses StreamingResponse but builds full content in memory (io.StringIO) — fine for <5000 rows."
+  ],
+  "updated_files": ["/app/backend/tests/test_timesheet_api.py"],
+  "success_rate": {"backend": "100% (32/32)", "frontend": "~95% (all flows work; 1 cosmetic dialog issue)"},
+  "test_credentials": "admin@timesheet.com / admin123 (seeded). Test employees created at runtime with TST/UI prefix.",
+  "seed_data_creation": "Tests create ephemeral employees (prefixed TST/UI) and clean them up via DELETE /api/employees/{id} which cascades.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Container date=2026-04-27 (Mon). Current week Mon=2026-04-27, Last week Mon=2026-04-20. Resend uses placeholder key — both reminder endpoints return sent=0 without error. Backend test file /app/backend/tests/test_timesheet_api.py is pytest-native, 32 tests, ~7s. Run with: REACT_APP_BACKEND_URL=<url> pytest backend/tests/test_timesheet_api.py. Frontend data-testids confirmed: day-hours-{date}, day-tasks-{date}, day-type-{date}, save-day-{date}, submit-week-button, week-select, tab-leave (employee), tab-leaves (admin), apply-leave-button, leave-type-select, leave-start, leave-end, leave-reason, submit-leave-button, approve-leave-{id}, reject-leave-{id}, emp-id-input, emp-name-input, emp-email-input, emp-password-input, lock-banner, missing-link-banner.",
+  "rca of the issue": "Review dialog content visually clipped: likely DialogContent CSS uses max-height without overflow-y:auto OR inner table has text-muted-foreground that becomes invisible on the dialog background. Needs inspection of AdminDashboard.jsx ReviewDialog component styling."
+}
