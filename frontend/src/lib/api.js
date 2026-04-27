@@ -2,15 +2,10 @@ import axios from "axios";
 
 export const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Cookie-based auth: backend sets httpOnly access_token cookie; we use credentials.
 export const api = axios.create({
   baseURL: API,
   withCredentials: true,
-});
-
-api.interceptors.request.use((config) => {
-  const t = localStorage.getItem("ts_token");
-  if (t) config.headers.Authorization = `Bearer ${t}`;
-  return config;
 });
 
 export function formatApiErrorDetail(detail) {

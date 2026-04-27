@@ -77,6 +77,20 @@ def weekday_dates(week_start: date) -> List[date]:
     return [week_start + timedelta(days=i) for i in range(5)]
 
 
+def parse_iso_date(s: str, label: str = "date") -> date:
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid {label} (expected YYYY-MM-DD)")
+
+
+def parse_week_start(s: str) -> date:
+    d = parse_iso_date(s, "week_start")
+    if d.weekday() != 0:
+        raise HTTPException(status_code=400, detail="week_start must be a Monday")
+    return d
+
+
 async def get_current_user(request: Request) -> dict:
     auth_header = request.headers.get("Authorization", "")
     token = None
@@ -223,7 +237,8 @@ async def create_employee(payload: CreateEmployeeRequest, _: dict = Depends(requ
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(doc)
-    doc.pop("_id", None); doc.pop("password_hash", None)
+    doc.pop("_id", None)
+    doc.pop("password_hash", None)
     return doc
 
 
@@ -291,6 +306,32 @@ async def _approved_leave_dates(employee_id: str, week_start: date) -> List[dict
     return result
 
 
+def _render_day(d: date, i: int, leave_map: dict, existing_map: dict) -> dict:
+    ds = d.isoformat()
+    if ds in leave_map:
+        lv = leave_map[ds]
+        return {
+            "date": ds, "day": DAY_NAMES[i], "type": "leave", "hours": 0,
+            "tasks": f"{lv['leave_type'].title()} leave: {lv['reason']}",
+            "from_leave": True,
+        }
+    if ds in existing_map:
+        e = existing_map[ds]
+        return {"date": ds, "day": DAY_NAMES[i], "type": e.get("type", "work"), "hours": e.get("hours", 0), "tasks": e.get("tasks", ""), "from_leave": False}
+    return {"date": ds, "day": DAY_NAMES[i], "type": "work", "hours": 0, "tasks": "", "from_leave": False}
+
+
+async def _check_lock_for_current_week(employee_id: str, ws: date) -> None:
+    today = datetime.now(timezone.utc).date()
+    if ws > get_week_start(today):
+        raise HTTPException(status_code=400, detail="Cannot edit a future week")
+    last_week = get_week_start(today) - timedelta(days=7)
+    if ws == get_week_start(today):
+        last_ts = await db.timesheets.find_one({"employee_id": employee_id, "week_start": last_week.isoformat()})
+        if not last_ts or last_ts.get("status") not in ("pending", "approved"):
+            raise HTTPException(status_code=423, detail=f"Submit last week's timesheet ({last_week.isoformat()}) first")
+
+
 # ---- Timesheets (Employee) ----
 @api_router.get("/timesheets/status")
 async def timesheet_status(user: dict = Depends(get_current_user)):
@@ -321,34 +362,12 @@ async def timesheet_status(user: dict = Depends(get_current_user)):
 async def get_week(week_start: str, user: dict = Depends(get_current_user)):
     if user.get("role") != "employee":
         raise HTTPException(status_code=403, detail="Employee only")
-    try:
-        ws = datetime.strptime(week_start, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid week_start")
-    if ws.weekday() != 0:
-        raise HTTPException(status_code=400, detail="week_start must be Monday")
+    ws = parse_week_start(week_start)
 
     ts = await db.timesheets.find_one({"employee_id": user["employee_id"], "week_start": ws.isoformat()}, {"_id": 0})
-    approved_leaves = await _approved_leave_dates(user["employee_id"], ws)
-    leave_map = {lv["date"]: lv for lv in approved_leaves}
-
-    days = []
+    leave_map = {lv["date"]: lv for lv in await _approved_leave_dates(user["employee_id"], ws)}
     existing_map = {e["date"]: e for e in (ts.get("daily_entries", []) if ts else [])}
-    for i, d in enumerate(weekday_dates(ws)):
-        ds = d.isoformat()
-        if ds in leave_map:
-            days.append({
-                "date": ds, "day": DAY_NAMES[i],
-                "type": "leave",
-                "hours": 0,
-                "tasks": f"{leave_map[ds]['leave_type'].title()} leave: {leave_map[ds]['reason']}",
-                "from_leave": True,
-            })
-        elif ds in existing_map:
-            e = existing_map[ds]
-            days.append({"date": ds, "day": DAY_NAMES[i], "type": e.get("type", "work"), "hours": e.get("hours", 0), "tasks": e.get("tasks", ""), "from_leave": False})
-        else:
-            days.append({"date": ds, "day": DAY_NAMES[i], "type": "work", "hours": 0, "tasks": "", "from_leave": False})
+    days = [_render_day(d, i, leave_map, existing_map) for i, d in enumerate(weekday_dates(ws))]
 
     return {
         "week_start": ws.isoformat(),
@@ -365,35 +384,18 @@ async def get_week(week_start: str, user: dict = Depends(get_current_user)):
 async def save_day(payload: SaveDayRequest, user: dict = Depends(get_current_user)):
     if user.get("role") != "employee":
         raise HTTPException(status_code=403, detail="Employee only")
-    try:
-        ws = datetime.strptime(payload.week_start, "%Y-%m-%d").date()
-        ed = datetime.strptime(payload.entry.date, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format")
-    if ws.weekday() != 0:
-        raise HTTPException(status_code=400, detail="week_start must be Monday")
+    ws = parse_week_start(payload.week_start)
+    ed = parse_iso_date(payload.entry.date, "entry.date")
     if not (ws <= ed <= ws + timedelta(days=4)):
         raise HTTPException(status_code=400, detail="Date must be within Mon-Fri of week_start")
 
-    today = datetime.now(timezone.utc).date()
-    if ws > get_week_start(today):
-        raise HTTPException(status_code=400, detail="Cannot edit a future week")
-
-    # Lock check: cannot edit current week if last week not submitted
-    current_week = get_week_start(today)
-    last_week = current_week - timedelta(days=7)
-    if ws == current_week:
-        last_ts = await db.timesheets.find_one({"employee_id": user["employee_id"], "week_start": last_week.isoformat()})
-        if not last_ts or last_ts.get("status") not in ("pending", "approved"):
-            raise HTTPException(status_code=423, detail=f"Submit last week's timesheet ({last_week.isoformat()}) first")
+    await _check_lock_for_current_week(user["employee_id"], ws)
 
     ts = await _get_or_create_week(user["employee_id"], user, ws)
     if ts["status"] in ("pending", "approved"):
         raise HTTPException(status_code=400, detail=f"Week already {ts['status']} — cannot edit")
 
-    # Block editing dates that fall on approved leave (auto-managed)
-    approved_leaves = await _approved_leave_dates(user["employee_id"], ws)
-    leave_dates = {lv["date"] for lv in approved_leaves}
+    leave_dates = {lv["date"] for lv in await _approved_leave_dates(user["employee_id"], ws)}
     if payload.entry.date in leave_dates and payload.entry.type != "leave":
         raise HTTPException(status_code=400, detail="This day is an approved leave; cannot mark as work")
 
@@ -423,10 +425,7 @@ async def save_day(payload: SaveDayRequest, user: dict = Depends(get_current_use
 async def submit_week(payload: SubmitWeekRequest, user: dict = Depends(get_current_user)):
     if user.get("role") != "employee":
         raise HTTPException(status_code=403, detail="Employee only")
-    try:
-        ws = datetime.strptime(payload.week_start, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid week_start")
+    ws = parse_week_start(payload.week_start)
 
     ts = await db.timesheets.find_one({"employee_id": user["employee_id"], "week_start": ws.isoformat()})
     if not ts:
@@ -577,11 +576,8 @@ async def export_csv(
 async def create_leave(payload: LeaveCreate, user: dict = Depends(get_current_user)):
     if user.get("role") != "employee":
         raise HTTPException(status_code=403, detail="Employee only")
-    try:
-        sd = datetime.strptime(payload.start_date, "%Y-%m-%d").date()
-        ed = datetime.strptime(payload.end_date, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format")
+    sd = parse_iso_date(payload.start_date, "start_date")
+    ed = parse_iso_date(payload.end_date, "end_date")
     if ed < sd:
         raise HTTPException(status_code=400, detail="end_date must be on/after start_date")
     doc = {

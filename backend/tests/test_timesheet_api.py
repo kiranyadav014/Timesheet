@@ -8,8 +8,8 @@ import requests
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "admin@timesheet.com"
-ADMIN_PASSWORD = "admin123"
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@timesheet.com")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 EMP_ID = f"TST{uuid.uuid4().hex[:4].upper()}"
 EMP_EMAIL = f"test_{uuid.uuid4().hex[:6]}@timesheet.com"
