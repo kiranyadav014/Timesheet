@@ -241,8 +241,7 @@ async def timesheet_status(user: dict = Depends(get_current_user)):
     current_ts = await db.timesheets.find_one(
         {"employee_id": user["employee_id"], "week_start": current_week.isoformat()}, {"_id": 0}
     )
-    locked = last_ts is None and today.weekday() >= 0  # locked if last week not submitted
-    # Only lock if last week's Friday has passed (i.e. we're past Friday of last week)
+    locked = last_ts is None  # lock current-week submission until last week is submitted
     return {
         "today": today.isoformat(),
         "is_friday_or_later": is_friday_or_later(today),
@@ -493,16 +492,16 @@ async def on_shutdown():
 
 
 # ---- Mount ----
+@api_router.get("/")
+async def root():
+    return {"message": "Timesheet API", "version": "1.0"}
+
+
 app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=[FRONTEND_URL, "http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@api_router.get("/")
-async def root():
-    return {"message": "Timesheet API", "version": "1.0"}
