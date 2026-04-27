@@ -253,8 +253,8 @@ function TimesheetTable({ items, onChanged }) {
       </table>
 
       <Dialog open={!!reviewing} onOpenChange={(o) => !o && setReviewing(null)}>
-        <DialogContent className="rounded-sm max-w-3xl" data-testid="review-dialog">
-          <DialogHeader><DialogTitle className="font-heading">Review timesheet</DialogTitle></DialogHeader>
+        <DialogContent className="rounded-sm max-w-3xl max-h-[90vh] overflow-y-auto bg-white text-ink" data-testid="review-dialog">
+          <DialogHeader><DialogTitle className="font-heading text-ink">Review timesheet</DialogTitle></DialogHeader>
           {reviewing && (
             <div className="space-y-4 text-sm">
               <div className="grid grid-cols-3 gap-4">
