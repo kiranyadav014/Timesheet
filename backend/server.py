@@ -421,6 +421,18 @@ async def save_day(payload: SaveDayRequest, user: dict = Depends(get_current_use
     return {"ok": True, "total_hours": total}
 
 
+def _merge_leaves_into_entries(entries: dict, leave_map: dict) -> dict:
+    """Overwrite entries on dates that have approved leaves."""
+    merged = dict(entries)
+    for ds, lv in leave_map.items():
+        merged[ds] = {"date": ds, "type": "leave", "hours": 0, "tasks": f"{lv['leave_type'].title()} leave: {lv['reason']}"}
+    return merged
+
+
+def _find_missing_days(week_start: date, entries: dict) -> List[str]:
+    return [d.isoformat() for d in weekday_dates(week_start) if d.isoformat() not in entries]
+
+
 @api_router.post("/timesheets/submit-week")
 async def submit_week(payload: SubmitWeekRequest, user: dict = Depends(get_current_user)):
     if user.get("role") != "employee":
@@ -433,34 +445,28 @@ async def submit_week(payload: SubmitWeekRequest, user: dict = Depends(get_curre
     if ts["status"] in ("pending", "approved"):
         raise HTTPException(status_code=400, detail=f"Already {ts['status']}")
 
-    # Merge approved leaves automatically
-    approved_leaves = await _approved_leave_dates(user["employee_id"], ws)
-    leave_map = {lv["date"]: lv for lv in approved_leaves}
-    entries = {e["date"]: e for e in ts.get("daily_entries", [])}
-    for ds, lv in leave_map.items():
-        entries[ds] = {"date": ds, "type": "leave", "hours": 0, "tasks": f"{lv['leave_type'].title()} leave: {lv['reason']}"}
+    leave_map = {lv["date"]: lv for lv in await _approved_leave_dates(user["employee_id"], ws)}
+    entries = _merge_leaves_into_entries(
+        {e["date"]: e for e in ts.get("daily_entries", [])}, leave_map
+    )
 
-    expected = [d.isoformat() for d in weekday_dates(ws)]
-    missing = [d for d in expected if d not in entries]
+    missing = _find_missing_days(ws, entries)
     if missing:
         raise HTTPException(status_code=400, detail=f"Missing days: {', '.join(missing)}")
 
     final_entries = sorted(entries.values(), key=lambda x: x["date"])
-    total = _recalc_total(final_entries)
-
     await db.timesheets.update_one(
         {"id": ts["id"]},
         {"$set": {
             "daily_entries": final_entries,
-            "total_hours": total,
+            "total_hours": _recalc_total(final_entries),
             "notes": (payload.notes or "").strip(),
             "status": "pending",
             "submitted_at": datetime.now(timezone.utc).isoformat(),
             "review_note": "",
         }},
     )
-    doc = await db.timesheets.find_one({"id": ts["id"]}, {"_id": 0})
-    return doc
+    return await db.timesheets.find_one({"id": ts["id"]}, {"_id": 0})
 
 
 @api_router.get("/timesheets/me")
@@ -479,13 +485,7 @@ async def list_all_timesheets(
     week_start: Optional[str] = None,
     _: dict = Depends(require_admin),
 ):
-    query = {}
-    if status_filter and status_filter != "all":
-        query["status"] = status_filter
-    if employee_id:
-        query["employee_id"] = employee_id.upper()
-    if week_start:
-        query["week_start"] = week_start
+    query = _build_timesheet_query(status_filter, employee_id, week_start)
     docs = await db.timesheets.find(query, {"_id": 0}).sort("submitted_at", -1).to_list(2000)
     return docs
 
@@ -533,6 +533,51 @@ async def reports_summary(_: dict = Depends(require_admin)):
     }
 
 
+def _build_timesheet_query(status_filter: Optional[str], employee_id: Optional[str], week_start: Optional[str]) -> dict:
+    query: dict = {}
+    if status_filter and status_filter != "all":
+        query["status"] = status_filter
+    if employee_id:
+        query["employee_id"] = employee_id.upper()
+    if week_start:
+        query["week_start"] = week_start
+    return query
+
+
+CSV_HEADERS = [
+    "Employee ID", "Name", "Week Start", "Date", "Day", "Type",
+    "Hours", "Tasks", "Week Status", "Submitted At", "Review Note",
+]
+
+
+def _csv_row(timesheet: dict, entry: dict) -> list:
+    weekday = datetime.strptime(entry["date"], "%Y-%m-%d").date().weekday()
+    day_name = DAY_NAMES[weekday] if weekday < 5 else "-"
+    return [
+        timesheet.get("employee_id", ""),
+        timesheet.get("employee_name", ""),
+        timesheet.get("week_start", ""),
+        entry.get("date", ""),
+        day_name,
+        entry.get("type", ""),
+        entry.get("hours", 0),
+        (entry.get("tasks", "") or "").replace("\n", " | "),
+        timesheet.get("status", ""),
+        timesheet.get("submitted_at", "") or "",
+        (timesheet.get("review_note", "") or "").replace("\n", " | "),
+    ]
+
+
+def _generate_csv(docs: list) -> str:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(CSV_HEADERS)
+    for ts in docs:
+        for entry in ts.get("daily_entries", []):
+            writer.writerow(_csv_row(ts, entry))
+    return buf.getvalue()
+
+
 @api_router.get("/admin/reports/csv")
 async def export_csv(
     status_filter: Optional[str] = None,
@@ -540,34 +585,14 @@ async def export_csv(
     week_start: Optional[str] = None,
     _: dict = Depends(require_admin),
 ):
-    query = {}
-    if status_filter and status_filter != "all":
-        query["status"] = status_filter
-    if employee_id:
-        query["employee_id"] = employee_id.upper()
-    if week_start:
-        query["week_start"] = week_start
+    query = _build_timesheet_query(status_filter, employee_id, week_start)
     docs = await db.timesheets.find(query, {"_id": 0}).sort("week_start", -1).to_list(5000)
-
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["Employee ID", "Name", "Week Start", "Date", "Day", "Type", "Hours", "Tasks", "Week Status", "Submitted At", "Review Note"])
-    for d in docs:
-        for e in d.get("daily_entries", []):
-            day_name = DAY_NAMES[(datetime.strptime(e["date"], "%Y-%m-%d").date().weekday())] if datetime.strptime(e["date"], "%Y-%m-%d").date().weekday() < 5 else "-"
-            writer.writerow([
-                d.get("employee_id", ""), d.get("employee_name", ""),
-                d.get("week_start", ""), e.get("date", ""), day_name,
-                e.get("type", ""), e.get("hours", 0),
-                (e.get("tasks", "") or "").replace("\n", " | "),
-                d.get("status", ""), d.get("submitted_at", "") or "",
-                (d.get("review_note", "") or "").replace("\n", " | "),
-            ])
-    buf.seek(0)
+    csv_text = _generate_csv(docs)
+    filename = f"timesheets_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
     return StreamingResponse(
-        iter([buf.getvalue()]),
+        iter([csv_text]),
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=timesheets_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"},
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 

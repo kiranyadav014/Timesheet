@@ -8,11 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { toast } from "sonner";
 import { Plus, Trash } from "@phosphor-icons/react";
-
-const Tag = ({ status }) => {
-  const cls = status === "approved" ? "tag-approved" : status === "rejected" ? "tag-rejected" : "tag-pending";
-  return <span className={`tag ${cls}`}>{status}</span>;
-};
+import { StatusTag } from "../../lib/status";
 
 const EMPTY = { leave_type: "casual", start_date: "", end_date: "", reason: "" };
 
@@ -120,7 +116,7 @@ export default function LeavePanel({ leaves, onChanged }) {
                 <td className="px-4 py-3 font-mono">{l.end_date}</td>
                 <td className="px-4 py-3 text-right font-mono">{l.days}</td>
                 <td className="px-4 py-3 max-w-xs truncate" title={l.reason}>{l.reason}</td>
-                <td className="px-4 py-3"><Tag status={l.status} /></td>
+                <td className="px-4 py-3"><StatusTag status={l.status} /></td>
                 <td className="px-4 py-3 text-right">
                   {l.status === "pending" && (
                     <Button size="sm" variant="outline" className="rounded-sm border-warn text-warn hover:bg-warn-bg"

@@ -28,9 +28,8 @@ export default function AdminDashboard() {
     try {
       const { data } = await api.get("/admin/reports/summary");
       setSummary(data);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn("summary failed:", err.message);
+    } catch {
+      // non-fatal: leave summary as-is
     }
   }, []);
 
@@ -38,9 +37,8 @@ export default function AdminDashboard() {
     try {
       const { data } = await api.get("/employees");
       setEmployees(data);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn("employees failed:", err.message);
+    } catch {
+      // non-fatal
     }
   }, []);
 

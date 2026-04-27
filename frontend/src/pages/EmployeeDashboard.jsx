@@ -1,118 +1,39 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, formatApiErrorDetail } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { toast } from "sonner";
 import { Clock, SignOut, CalendarBlank, PaperPlaneTilt } from "@phosphor-icons/react";
 
 import StatusBanners from "../components/employee/StatusBanners";
 import DaysGrid from "../components/employee/DaysGrid";
 import HistoryTable from "../components/employee/HistoryTable";
 import LeavePanel from "../components/employee/LeavePanel";
-
-const StatusBadge = ({ status }) => {
-  if (!status || status === "draft") return <span className="tag">Draft</span>;
-  const cls = status === "approved" ? "tag-approved" : status === "rejected" ? "tag-rejected" : "tag-pending";
-  return <span className={`tag ${cls}`}>{status}</span>;
-};
+import { StatusTag } from "../lib/status";
+import { useEmployeeTimesheet } from "../hooks/useEmployeeTimesheet";
 
 export default function EmployeeDashboard() {
   const { user, logout } = useAuth();
   const [params] = useSearchParams();
   const missingFromUrl = (params.get("missing") || "").split(",").filter(Boolean);
 
-  const [status, setStatus] = useState(null);
-  const [week, setWeek] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [leaves, setLeaves] = useState([]);
-  const [activeWeekStart, setActiveWeekStart] = useState("");
-  const [notes, setNotes] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const dayRefs = useRef({});
+  const t = useEmployeeTimesheet();
+  const { status, week, history, leaves, activeWeekStart, setActiveWeekStart,
+          notes, setNotes, submitting, dayRefs,
+          updateDay, saveDay, submitWeek, loadAll } = t;
 
-  const loadAll = useCallback(async () => {
-    try {
-      const [s, h, l] = await Promise.all([
-        api.get("/timesheets/status"),
-        api.get("/timesheets/me"),
-        api.get("/leaves/me"),
-      ]);
-      setStatus(s.data);
-      setHistory(h.data);
-      setLeaves(l.data);
-      setActiveWeekStart((prev) => prev || (s.data.locked ? s.data.last_week_start : s.data.current_week_start));
-    } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail));
-    }
-  }, []);
-
-  const loadWeek = useCallback(async (ws) => {
-    if (!ws) return;
-    try {
-      const { data } = await api.get("/timesheets/week", { params: { week_start: ws } });
-      setWeek(data);
-      setNotes(data.notes || "");
-    } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail));
-    }
-  }, []);
-
-  useEffect(() => { loadAll(); }, [loadAll]);
-  useEffect(() => { loadWeek(activeWeekStart); }, [activeWeekStart, loadWeek]);
-
+  // Scroll to first missing day mentioned in the email link
   useEffect(() => {
-    if (week && missingFromUrl.length > 0) {
-      const target = missingFromUrl.find((d) => dayRefs.current[d]);
-      if (target) {
-        const el = dayRefs.current[target];
-        setTimeout(() => el?.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [week]);
-
-  const updateDay = useCallback((date, patch) => {
-    setWeek((w) => {
-      if (!w) return w;
-      const nextDays = w.days.map((d) => (d.date === date ? { ...d, ...patch } : d));
-      const total = nextDays.reduce((s, d) => s + (d.type === "work" ? Number(d.hours || 0) : 0), 0);
-      return { ...w, days: nextDays, total_hours: total };
-    });
-  }, []);
-
-  const saveDay = async (d) => {
-    if (!week || ["pending", "approved"].includes(week.status) || d.from_leave) return;
-    try {
-      await api.post("/timesheets/save-day", {
-        week_start: week.week_start,
-        entry: { date: d.date, type: d.type, hours: Number(d.hours || 0), tasks: d.tasks || "" },
-      });
-      toast.success(`${d.day} saved`);
-      loadWeek(week.week_start);
-      loadAll();
-    } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail));
-    }
-  };
-
-  const submitWeek = async () => {
-    setSubmitting(true);
-    try {
-      await api.post("/timesheets/submit-week", { week_start: week.week_start, notes });
-      toast.success("Submitted for review");
-      loadWeek(week.week_start);
-      loadAll();
-    } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail));
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    if (!week || missingFromUrl.length === 0) return;
+    const target = missingFromUrl.find((d) => dayRefs.current[d]);
+    if (!target) return;
+    const el = dayRefs.current[target];
+    const id = setTimeout(() => el?.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+    return () => clearTimeout(id);
+  }, [week, missingFromUrl, dayRefs]);
 
   if (!status || !week) return <div className="p-12 text-ink2">Loading…</div>;
 
@@ -137,22 +58,9 @@ export default function EmployeeDashboard() {
           </TabsList>
 
           <TabsContent value="week" className="mt-6 space-y-6">
-            <WeekToolbar
-              status={status} week={week}
-              activeWeekStart={activeWeekStart} setActiveWeekStart={setActiveWeekStart}
-            />
-            <DaysGrid
-              days={week.days} editable={editable}
-              missingDates={missingFromUrl}
-              onChange={updateDay} onSave={saveDay}
-              dayRefsRef={dayRefs}
-            />
-            {editable && (
-              <SubmitCard
-                notes={notes} setNotes={setNotes}
-                submitting={submitting} onSubmit={submitWeek}
-              />
-            )}
+            <WeekToolbar status={status} week={week} activeWeekStart={activeWeekStart} setActiveWeekStart={setActiveWeekStart} />
+            <DaysGrid days={week.days} editable={editable} missingDates={missingFromUrl} onChange={updateDay} onSave={saveDay} dayRefsRef={dayRefs} />
+            {editable && <SubmitCard notes={notes} setNotes={setNotes} submitting={submitting} onSubmit={submitWeek} />}
           </TabsContent>
 
           <TabsContent value="leave" className="mt-6">
@@ -207,7 +115,7 @@ function WeekToolbar({ status, week, activeWeekStart, setActiveWeekStart }) {
             </SelectItem>
           </SelectContent>
         </Select>
-        <StatusBadge status={week.status} />
+        <StatusTag status={week.status} />
       </div>
       <div className="flex items-center gap-3 text-sm">
         <div className="text-ink2">Total this week</div>

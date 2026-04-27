@@ -85,7 +85,7 @@ def test_timesheet_status_initially_locked():
     for k in ("current_week_start", "last_week_start", "locked", "weekday",
               "current_week_status", "last_week_status"):
         assert k in d, f"missing {k} in status"
-    assert d["locked"] is True
+    assert d["locked"]
     state["current_week"] = d["current_week_start"]
     state["last_week"] = d["last_week_start"]
 
@@ -168,7 +168,7 @@ def test_status_after_last_week_submitted():
     assert r.status_code == 200
     d = r.json()
     assert d["last_week_status"] == "pending"
-    assert d["locked"] is False
+    assert not d["locked"]
 
 
 def test_save_day_current_week_now_ok():
@@ -318,8 +318,8 @@ def test_approved_leave_reflects_in_week():
     assert r.status_code == 200
     days = r.json()["days"]
     tue, wed = days[1], days[2]
-    assert tue["from_leave"] is True and tue["type"] == "leave"
-    assert wed["from_leave"] is True and wed["type"] == "leave"
+    assert tue["from_leave"] and tue["type"] == "leave"
+    assert wed["from_leave"] and wed["type"] == "leave"
 
 
 def test_save_day_on_approved_leave_as_work_blocked():

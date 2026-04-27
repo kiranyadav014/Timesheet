@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
 
 const AuthContext = createContext(null);
@@ -12,12 +12,7 @@ export function AuthProvider({ children }) {
     try {
       const { data } = await api.get("/auth/me");
       setUser(data);
-    } catch (err) {
-      // Not authenticated or session expired
-      if (err?.response?.status !== 401) {
-        // eslint-disable-next-line no-console
-        console.warn("auth/me failed:", err.message);
-      }
+    } catch {
       setUser(false);
     } finally {
       setLoading(false);
@@ -37,18 +32,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      await api.post("/auth/logout");
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn("logout failed:", err.message);
-    }
+    try { await api.post("/auth/logout"); } catch { /* non-fatal */ }
     setUser(false);
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refresh }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ user, loading, login, logout, refresh }),
+    [user, loading, login, logout, refresh]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
