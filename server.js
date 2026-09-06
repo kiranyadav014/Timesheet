@@ -76,7 +76,7 @@ function passwordMatches(password, stored) { if (!stored || !stored.includes(':'
 function seedData() {
   if (db.prepare('SELECT COUNT(*) AS count FROM employees').get().count === 0) {
     const add = db.prepare('INSERT INTO employees (name, email, role, color) VALUES (?, ?, ?, ?)');
-    add.run('Jenna Parker', 'admin@example.local', 'admin', '#0033cc'); add.run('Arun Shah', 'arun@example.local', 'employee', '#2563eb'); add.run('Maya Chen', 'maya@example.local', 'employee', '#d946ef'); add.run('Leo Martins', 'leo@example.local', 'employee', '#0891b2');
+    add.run('Admin', 'admin@example.local', 'admin', '#0033cc'); add.run('Arun Shah', 'arun@example.local', 'employee', '#2563eb'); add.run('Maya Chen', 'maya@example.local', 'employee', '#d946ef'); add.run('Leo Martins', 'leo@example.local', 'employee', '#0891b2');
   }
   const people = db.prepare('SELECT id, role, employee_code, password_hash FROM employees ORDER BY id').all();
   const update = db.prepare('UPDATE employees SET employee_code = ?, password_hash = ? WHERE id = ?');

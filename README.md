@@ -19,7 +19,7 @@ Open `http://localhost:3000`.
 
 ## First-run accounts
 
-- Administrator: `jenna@example.local` / `Admin@123`
+- Administrator: `admin@example.local` / `Admin@123`
 - Employee examples: an `@example.local` email / `Welcome@123`
 
 Change all starter passwords before using the system with real employees.
