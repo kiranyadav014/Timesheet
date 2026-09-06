@@ -90,3 +90,6 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Local Timesheet data — never commit employee records or the SQLite database.
+/data/
