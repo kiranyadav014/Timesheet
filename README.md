@@ -24,6 +24,19 @@ Open `http://localhost:3000`.
 
 Change all starter passwords before using the system with real employees.
 
+## Deploy to Vercel with Neon Postgres
+
+The app automatically uses `DATABASE_URL` when it is set and falls back to the local SQLite database otherwise. For a hosted deployment, create a Neon Postgres database and add the connection string to Vercel as an environment variable named `DATABASE_URL`.
+
+Example configuration:
+
+```env
+PORT=3000
+DATABASE_URL=postgresql://user:password@host:5432/timesheet?sslmode=require
+```
+
+The project includes a `.env.example` file for this setup.
+
 ## Data privacy
 
 The database is stored at `data/timesheet.sqlite`. It is excluded from Git, along with all local employee records. Email reminders are disabled in this offline edition because sending email requires an external provider.
